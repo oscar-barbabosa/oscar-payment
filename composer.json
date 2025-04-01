@@ -1,0 +1,20 @@
+{
+    "name": "oscarpayment/module-payment",
+    "description": "Custom payment method for delayed order creation via external API",
+    "require": {
+      "php": "^7.4 || ^8.1",
+      "magento/framework": "*"
+    },
+    "type": "magento2-module",
+    "version": "1.0.0",
+    "license": "proprietary",
+    "autoload": {
+      "files": [
+        "registration.php"
+      ],
+      "psr-4": {
+        "OscarPayment\\Payment\\": ""
+      }
+    }
+  }
+  
