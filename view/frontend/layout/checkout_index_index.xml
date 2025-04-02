@@ -20,6 +20,10 @@
                                                                     <item name="methods" xsi:type="array">
                                                                         <item name="oscar_payment" xsi:type="array">
                                                                             <item name="isBillingAddressRequired" xsi:type="boolean">true</item>
+                                                                            <item name="component" xsi:type="string">Oscar_Payment/js/view/payment/method-renderer/oscar-payment</item>
+                                                                            <item name="config" xsi:type="array">
+                                                                                <item name="template" xsi:type="string">Oscar_Payment/payment/oscar-payment</item>
+                                                                            </item>
                                                                         </item>
                                                                     </item>
                                                                 </item>

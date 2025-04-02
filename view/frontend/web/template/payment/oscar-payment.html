@@ -14,7 +14,7 @@
             <!-- ko template: getTemplate() --><!-- /ko -->
             <!-- /ko -->
         </div>
-        <div class="payment-method-description">
+        <div class="payment-method-description" data-bind="if: getDescription()">
             <span data-bind="text: getDescription()"></span>
         </div>
     </div>

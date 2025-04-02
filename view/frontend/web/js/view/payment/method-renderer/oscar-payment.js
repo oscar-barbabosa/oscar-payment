@@ -11,20 +11,33 @@ define(
 
         return Component.extend({
             defaults: {
-                template: 'Oscar_Payment/payment/oscar-payment'
+                template: 'Oscar_Payment/payment/oscar-payment',
+                code: 'oscar_payment'
             },
 
             getCode: function() {
-                return 'oscar_payment';
+                return this.code;
             },
 
             isActive: function() {
                 return true;
             },
 
+            isAvailable: function() {
+                return this.getCode() in window.checkoutConfig.payment;
+            },
+
+            getTitle: function() {
+                return window.checkoutConfig.payment[this.getCode()].title;
+            },
+
+            getDescription: function() {
+                return window.checkoutConfig.payment[this.getCode()].description;
+            },
+
             getData: function() {
                 return {
-                    'method': this.item.method,
+                    'method': this.getCode(),
                     'additional_data': {}
                 };
             },
@@ -32,6 +45,10 @@ define(
             afterPlaceOrder: function() {
                 redirectOnSuccessAction.redirectUrl = url.build('oscar_payment/payment/redirect');
                 this.redirectAfterPlaceOrder = true;
+            },
+
+            validate: function() {
+                return true;
             }
         });
     }
