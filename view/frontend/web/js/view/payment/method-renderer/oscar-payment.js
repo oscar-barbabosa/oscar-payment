@@ -4,9 +4,10 @@ define(
         'Magento_Checkout/js/model/quote',
         'Magento_Checkout/js/model/full-screen-loader',
         'Magento_Checkout/js/action/redirect-on-success',
-        'mage/url'
+        'mage/url',
+        'jquery'
     ],
-    function (Component, quote, fullScreenLoader, redirectOnSuccessAction, url) {
+    function (Component, quote, fullScreenLoader, redirectOnSuccessAction, url, $) {
         'use strict';
 
         return Component.extend({
@@ -43,8 +44,11 @@ define(
             },
 
             afterPlaceOrder: function() {
-                redirectOnSuccessAction.redirectUrl = url.build('oscar_payment/payment/redirect');
-                this.redirectAfterPlaceOrder = true;
+                $.get(url.build('oscar_payment/payment/start')).done(function(response) {
+                    if (response.redirect_url) {
+                        window.location.replace(response.redirect_url);
+                    }
+                });
             },
 
             validate: function() {

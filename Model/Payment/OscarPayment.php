@@ -2,7 +2,6 @@
 namespace Oscar\Payment\Model\Payment;
 
 use Magento\Payment\Model\Method\AbstractMethod;
-use Magento\Payment\Model\Method\Online\GatewayInterface;
 use Magento\Framework\DataObject;
 use Magento\Quote\Api\Data\PaymentInterface;
 use Magento\Sales\Api\Data\OrderInterface;
@@ -10,19 +9,22 @@ use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\HTTP\Client\Curl;
 use Magento\Framework\Serialize\Serializer\Json;
 
-class OscarPayment extends AbstractMethod implements GatewayInterface
+class OscarPayment extends AbstractMethod
 {
     const CODE = 'oscar_payment';
 
     protected $_code = self::CODE;
     protected $_isGateway = true;
-    protected $_canAuthorize = true;
-    protected $_canCapture = true;
-    protected $_canRefund = true;
-    protected $_canVoid = true;
+    protected $_canAuthorize = false;
+    protected $_canCapture = false;
+    protected $_canRefund = false;
+    protected $_canVoid = false;
     protected $_canUseCheckout = true;
-    protected $_canUseInternal = true;
-    protected $_isInitializeNeeded = true;
+    protected $_canUseInternal = false;
+    protected $_isInitializeNeeded = false;
+    protected $_canOrder = true;
+    protected $_isOffline = false;
+    protected $_canCapturePartial = false;
 
     /**
      * @var Curl
@@ -84,17 +86,14 @@ class OscarPayment extends AbstractMethod implements GatewayInterface
     }
 
     /**
-     * Initialize payment method
-     *
-     * @param string $paymentAction
-     * @param object $stateObject
+     * @param \Magento\Payment\Model\InfoInterface $payment
+     * @param float $amount
      * @return $this
+     * @throws LocalizedException
      */
-    public function initialize($paymentAction, $stateObject)
+    public function order(\Magento\Payment\Model\InfoInterface $payment, $amount)
     {
-        $payment = $this->getInfoInstance();
-        $order = $payment->getOrder();
-        $quote = $this->quoteFactory->create()->load($order->getQuoteId());
+        $quote = $this->checkoutSession->getQuote();
 
         try {
             // Call external API to create payment
@@ -105,16 +104,12 @@ class OscarPayment extends AbstractMethod implements GatewayInterface
             $quote->setData('oscar_payment_url', $response['payment_url']);
             $quote->save();
 
-            // Set order state to pending
-            $stateObject->setState(\Magento\Sales\Model\Order::STATE_PENDING);
-            $stateObject->setStatus('pending');
-            $stateObject->setIsNotified(false);
+            // Cancel the current order process
+            throw new LocalizedException(__('redirect'));
 
         } catch (\Exception $e) {
-            throw new LocalizedException(__('Error creating payment: %1', $e->getMessage()));
+            throw new LocalizedException(__($e->getMessage()));
         }
-
-        return $this;
     }
 
     /**
@@ -125,54 +120,31 @@ class OscarPayment extends AbstractMethod implements GatewayInterface
      */
     private function createPaymentInExternalApi($quote)
     {
-        // TODO: Implement actual API call
-        // This is just an example structure
-        $apiUrl = $this->getConfigData('api_url');
-        $apiKey = $this->getConfigData('api_key');
-
-        $data = [
-            'amount' => $quote->getGrandTotal(),
-            'currency' => $quote->getBaseCurrencyCode(),
-            'order_id' => $quote->getId(),
-            'success_url' => $this->urlBuilder->getUrl('oscar_payment/payment/success'),
-            'cancel_url' => $this->urlBuilder->getUrl('oscar_payment/payment/cancel'),
-            'webhook_url' => $this->urlBuilder->getUrl('oscar_payment/webhook/index'),
+        // Simulate external API response
+        return [
+            'payment_id' => 'test_' . $quote->getId() . '_' . time(),
+            'payment_url' => 'https://www.google.com' // For testing purposes
         ];
-
-        $this->curl->addHeader('Content-Type', 'application/json');
-        $this->curl->addHeader('Authorization', 'Bearer ' . $apiKey);
-        $this->curl->post($apiUrl, $this->json->serialize($data));
-
-        $response = $this->json->unserialize($this->curl->getBody());
-
-        if (!isset($response['payment_id']) || !isset($response['payment_url'])) {
-            throw new LocalizedException(__('Invalid response from payment API'));
-        }
-
-        return $response;
     }
 
     /**
-     * Get payment redirect URL
+     * Get redirect URL
      *
      * @return string
      */
     public function getOrderPlaceRedirectUrl()
     {
-        $quote = $this->checkoutSession->getQuote();
-        return $quote->getData('oscar_payment_url');
+        return $this->urlBuilder->getUrl('oscar_payment/payment/redirect');
     }
 
     /**
-     * Post request to gateway and return response
+     * Is active
      *
-     * @param DataObject $request
-     * @return DataObject
+     * @param int|null $storeId
+     * @return bool
      */
-    public function postRequest(DataObject $request, $client)
+    public function isActive($storeId = null)
     {
-        // This method is required by the interface but we don't use it
-        // as we handle the API call in createPaymentInExternalApi
-        return $request;
+        return (bool) $this->getConfigData('active', $storeId);
     }
 } 
