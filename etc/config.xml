@@ -4,7 +4,7 @@
         <payment>
             <oscar_payment>
                 <active>0</active>
-                <model>OscarPayment\Payment\Model\Payment\OscarPayment</model>
+                <model>Oscar\Payment\Model\Payment\OscarPayment</model>
                 <title>Oscar Payment</title>
                 <allowspecific>0</allowspecific>
             </oscar_payment>

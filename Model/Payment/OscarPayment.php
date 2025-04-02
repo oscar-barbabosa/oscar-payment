@@ -1,5 +1,5 @@
 <?php
-namespace OscarPayment\Payment\Model\Payment;
+namespace Oscar\Payment\Model\Payment;
 
 use Magento\Payment\Model\Method\AbstractMethod;
 use Magento\Payment\Model\Method\Online\GatewayInterface;
@@ -161,5 +161,18 @@ class OscarPayment extends AbstractMethod implements GatewayInterface
     {
         $quote = $this->checkoutSession->getQuote();
         return $quote->getData('oscar_payment_url');
+    }
+
+    /**
+     * Post request to gateway and return response
+     *
+     * @param DataObject $request
+     * @return DataObject
+     */
+    public function postRequest(DataObject $request, $client)
+    {
+        // This method is required by the interface but we don't use it
+        // as we handle the API call in createPaymentInExternalApi
+        return $request;
     }
 } 
