@@ -8,12 +8,13 @@ use Magento\Sales\Api\Data\OrderInterface;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\HTTP\Client\Curl;
 use Magento\Framework\Serialize\Serializer\Json;
+use Psr\Log\LoggerInterface;
 
 class OscarPayment extends AbstractMethod
 {
     const CODE = 'oscar_payment';
 
-    protected $_code = self::CODE;
+    protected $_code = 'oscar_payment';
     protected $_isGateway = true;
     protected $_canAuthorize = false;
     protected $_canCapture = false;
@@ -21,7 +22,7 @@ class OscarPayment extends AbstractMethod
     protected $_canVoid = false;
     protected $_canUseCheckout = true;
     protected $_canUseInternal = false;
-    protected $_isInitializeNeeded = false;
+    protected $_isInitializeNeeded = true;
     protected $_canOrder = true;
     protected $_isOffline = false;
     protected $_canCapturePartial = false;
@@ -51,6 +52,25 @@ class OscarPayment extends AbstractMethod
      */
     private $checkoutSession;
 
+    /**
+     * @var LoggerInterface
+     */
+    protected $logger;
+
+    /**
+     * @param \Magento\Framework\Model\Context $context
+     * @param \Magento\Framework\Registry $registry
+     * @param \Magento\Framework\Api\ExtensionAttributesFactory $extensionFactory
+     * @param \Magento\Framework\Api\AttributeValueFactory $customAttributeFactory
+     * @param \Magento\Payment\Helper\Data $paymentData
+     * @param \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig
+     * @param \Magento\Payment\Model\Method\Logger $logger
+     * @param \Magento\Framework\UrlInterface $urlBuilder
+     * @param \Magento\Quote\Model\QuoteFactory $quoteFactory
+     * @param \Magento\Checkout\Model\Session $checkoutSession
+     * @param LoggerInterface $psrLogger
+     * @param array $data
+     */
     public function __construct(
         \Magento\Framework\Model\Context $context,
         \Magento\Framework\Registry $registry,
@@ -59,11 +79,10 @@ class OscarPayment extends AbstractMethod
         \Magento\Payment\Helper\Data $paymentData,
         \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
         \Magento\Payment\Model\Method\Logger $logger,
-        Curl $curl,
-        Json $json,
         \Magento\Framework\UrlInterface $urlBuilder,
         \Magento\Quote\Model\QuoteFactory $quoteFactory,
         \Magento\Checkout\Model\Session $checkoutSession,
+        LoggerInterface $psrLogger,
         array $data = []
     ) {
         parent::__construct(
@@ -78,36 +97,89 @@ class OscarPayment extends AbstractMethod
             null,
             $data
         );
-        $this->curl = $curl;
-        $this->json = $json;
         $this->urlBuilder = $urlBuilder;
         $this->quoteFactory = $quoteFactory;
         $this->checkoutSession = $checkoutSession;
+        $this->logger = $psrLogger;
     }
 
     /**
-     * @param \Magento\Payment\Model\InfoInterface $payment
-     * @param float $amount
+     * Method that will be executed instead of authorize or capture
+     * if flag isInitializeNeeded set to true
+     *
+     * @param string $paymentAction
+     * @param object $stateObject
+     *
      * @return $this
      * @throws LocalizedException
      */
-    public function order(\Magento\Payment\Model\InfoInterface $payment, $amount)
+    public function initialize($paymentAction, $stateObject)
     {
-        $quote = $this->checkoutSession->getQuote();
+        $this->logger->debug('OscarPayment: Initializing payment method');
+        
+        /** @var \Magento\Quote\Model\Quote\Payment $payment */
+        $payment = $this->getInfoInstance();
+        $quote = $payment->getQuote();
+
+        $this->logger->debug('OscarPayment: Quote details', [
+            'quote_id' => $quote->getId(),
+            'payment_method' => $quote->getPayment()->getMethod(),
+            'current_payment_url' => $quote->getData('oscar_payment_url'),
+            'is_active' => $quote->getIsActive(),
+            'reserved_order_id' => $quote->getReservedOrderId()
+        ]);
 
         try {
+            $this->logger->debug('OscarPayment: Creating payment in external API', [
+                'quote_id' => $quote->getId()
+            ]);
+            
             // Call external API to create payment
             $response = $this->createPaymentInExternalApi($quote);
+            
+            $this->logger->debug('OscarPayment: API response received', [
+                'payment_id' => $response['payment_id'],
+                'payment_url' => $response['payment_url']
+            ]);
             
             // Store payment data in quote for later use
             $quote->setData('oscar_payment_id', $response['payment_id']);
             $quote->setData('oscar_payment_url', $response['payment_url']);
+            
+            $this->logger->debug('OscarPayment: Before saving quote', [
+                'payment_id' => $quote->getData('oscar_payment_id'),
+                'payment_url' => $quote->getData('oscar_payment_url')
+            ]);
+            
+            // Save the quote and reload it to ensure data is persisted
+            $quote->save();
+            $quote = $this->quoteFactory->create()->load($quote->getId());
+            
+            $this->logger->debug('OscarPayment: After saving and reloading quote', [
+                'payment_id' => $quote->getData('oscar_payment_id'),
+                'payment_url' => $quote->getData('oscar_payment_url')
+            ]);
+
+            // Set state object as pending
+            $stateObject->setState(\Magento\Sales\Model\Order::STATE_PENDING_PAYMENT);
+            $stateObject->setStatus('pending_payment');
+            $stateObject->setIsNotified(false);
+
+            // Store the quote ID for later use
+            $this->checkoutSession->setOscarPaymentQuoteId($quote->getId());
+            
+            // Make sure the quote is not marked as submitted
+            $quote->setIsActive(true);
+            $quote->setReservedOrderId(null);
             $quote->save();
 
-            // Cancel the current order process
-            throw new LocalizedException(__('redirect'));
-
+            $this->logger->debug('OscarPayment: Initialization complete');
+            return $this;
         } catch (\Exception $e) {
+            $this->logger->error('OscarPayment: Error during initialization', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             throw new LocalizedException(__($e->getMessage()));
         }
     }
@@ -134,7 +206,32 @@ class OscarPayment extends AbstractMethod
      */
     public function getOrderPlaceRedirectUrl()
     {
-        return $this->urlBuilder->getUrl('oscar_payment/payment/redirect');
+        $this->logger->debug('OscarPayment: Getting redirect URL');
+        
+        /** @var \Magento\Quote\Model\Quote\Payment $payment */
+        $payment = $this->getInfoInstance();
+        $quote = $payment->getQuote();
+        
+        if (!$quote || !$quote->getId()) {
+            $this->logger->error('OscarPayment: No quote found when getting redirect URL');
+            return '';
+        }
+
+        $this->logger->debug('OscarPayment: Quote found', [
+            'quote_id' => $quote->getId(),
+            'payment_method' => $quote->getPayment()->getMethod()
+        ]);
+
+        $redirectUrl = $quote->getData('oscar_payment_url');
+        if (!$redirectUrl) {
+            $this->logger->error('OscarPayment: No payment URL found in quote', [
+                'quote_data' => $quote->getData()
+            ]);
+            return '';
+        }
+
+        $this->logger->debug('OscarPayment: Found payment URL', ['url' => $redirectUrl]);
+        return $redirectUrl;
     }
 
     /**
@@ -146,5 +243,28 @@ class OscarPayment extends AbstractMethod
     public function isActive($storeId = null)
     {
         return (bool) $this->getConfigData('active', $storeId);
+    }
+
+    /**
+     * Check whether payment method can be used
+     *
+     * @param \Magento\Quote\Api\Data\CartInterface|null $quote
+     * @return bool
+     */
+    public function isAvailable(\Magento\Quote\Api\Data\CartInterface $quote = null)
+    {
+        return parent::isAvailable($quote) && $this->isActive();
+    }
+
+    /**
+     * Validate payment method information
+     *
+     * @return $this
+     * @throws LocalizedException
+     */
+    public function validate()
+    {
+        parent::validate();
+        return $this;
     }
 } 
