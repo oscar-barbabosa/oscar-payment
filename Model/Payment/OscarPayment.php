@@ -224,10 +224,35 @@ class OscarPayment extends AbstractMethod
 
         $redirectUrl = $quote->getData('oscar_payment_url');
         if (!$redirectUrl) {
-            $this->logger->error('OscarPayment: No payment URL found in quote', [
-                'quote_data' => $quote->getData()
+            $this->logger->debug('OscarPayment: No payment URL found, creating new payment');
+            
+            // Call external API to create payment
+            $response = $this->createPaymentInExternalApi($quote);
+            
+            $this->logger->debug('OscarPayment: API response received', [
+                'payment_id' => $response['payment_id'],
+                'payment_url' => $response['payment_url']
             ]);
-            return '';
+            
+            // Store payment data in quote for later use
+            $quote->setData('oscar_payment_id', $response['payment_id']);
+            $quote->setData('oscar_payment_url', $response['payment_url']);
+            
+            $this->logger->debug('OscarPayment: Before saving quote', [
+                'payment_id' => $quote->getData('oscar_payment_id'),
+                'payment_url' => $quote->getData('oscar_payment_url')
+            ]);
+            
+            // Save the quote and reload it to ensure data is persisted
+            $quote->save();
+            $quote = $this->quoteFactory->create()->load($quote->getId());
+            
+            $this->logger->debug('OscarPayment: After saving and reloading quote', [
+                'payment_id' => $quote->getData('oscar_payment_id'),
+                'payment_url' => $quote->getData('oscar_payment_url')
+            ]);
+
+            $redirectUrl = $quote->getData('oscar_payment_url');
         }
 
         $this->logger->debug('OscarPayment: Found payment URL', ['url' => $redirectUrl]);
