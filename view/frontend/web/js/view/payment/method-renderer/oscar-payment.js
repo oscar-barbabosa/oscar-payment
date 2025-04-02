@@ -24,15 +24,15 @@ define(
             },
 
             isAvailable: function() {
-                return this.getCode() in window.checkoutConfig.payment;
+                return true;
             },
 
             getTitle: function() {
-                return window.checkoutConfig.payment[this.getCode()].title;
+                return 'Oscar Payment';
             },
 
             getDescription: function() {
-                return window.checkoutConfig.payment[this.getCode()].description;
+                return 'Pay using our secure payment gateway';
             },
 
             getData: function() {
