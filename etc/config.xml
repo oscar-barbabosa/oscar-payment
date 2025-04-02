@@ -3,10 +3,12 @@
     <default>
         <payment>
             <oscar_payment>
-                <active>0</active>
+                <active>1</active>
                 <model>Oscar\Payment\Model\Payment\OscarPayment</model>
                 <title>Oscar Payment</title>
                 <allowspecific>0</allowspecific>
+                <sort_order>1</sort_order>
+                <group>offline</group>
             </oscar_payment>
         </payment>
     </default>

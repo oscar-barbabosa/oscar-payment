@@ -1,5 +1,5 @@
 {
-    "name": "oscarpayment/module-payment",
+    "name": "oscar/module-payment",
     "description": "Custom payment method for delayed order creation via external API",
     "require": {
       "php": "^7.4 || ^8.1",
@@ -13,7 +13,7 @@
         "registration.php"
       ],
       "psr-4": {
-        "OscarPayment\\Payment\\": ""
+        "Oscar\\Payment\\": ""
       }
     }
   }
