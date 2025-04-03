@@ -174,6 +174,7 @@ class OscarPayment extends AbstractMethod
             $quote->save();
 
             $this->logger->debug('OscarPayment: Initialization complete');
+            
             return $this;
         } catch (\Exception $e) {
             $this->logger->error('OscarPayment: Error during initialization', [
@@ -256,7 +257,31 @@ class OscarPayment extends AbstractMethod
         }
 
         $this->logger->debug('OscarPayment: Found payment URL', ['url' => $redirectUrl]);
+        
+        // Store the quote ID in session for later use
+        $this->checkoutSession->setOscarPaymentQuoteId($quote->getId());
+        
+        // Clear the session to prevent order creation
+        $this->checkoutSession->clearQuote();
+        $this->checkoutSession->clearStorage();
+        
+        $this->logger->debug('OscarPayment: Performing redirect', ['url' => $redirectUrl]);
+        
         return $redirectUrl;
+    }
+
+    /**
+     * Order payment
+     *
+     * @param \Magento\Payment\Model\InfoInterface $payment
+     * @param float $amount
+     * @return $this
+     * @throws LocalizedException
+     */
+    public function order(\Magento\Payment\Model\InfoInterface $payment, $amount)
+    {
+        $this->logger->debug('OscarPayment: Order method called');
+        throw new LocalizedException(__('Please complete the payment first'));
     }
 
     /**
